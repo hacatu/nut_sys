@@ -1,0 +1,42 @@
+name: cargo t
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ main ]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test Build
+      run: |
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+        sudo apt-get update
+        sudo apt-get install -y libsdl2-dev clang-15 llvm-15 gcc-13 opencl-headers ocl-icd-opencl-dev
+        sudo update-alternatives \
+          --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
+          --slave /usr/bin/gcc-ar gcc-ar /usr/bin/gcc-ar-13 \
+          --slave /usr/bin/gcc-ranlib gcc-ranlib /usr/bin/gcc-ranlib-13 \
+          --slave /usr/bin/gcov gcov /usr/bin/gcov-13
+        sudo update-alternatives \
+          --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-15 100 \
+          --slave /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-15 \
+          --slave /usr/bin/llvm-cov llvm-cov /usr/bin/llvm-cov-15
+        sudo update-alternatives \
+         --install /usr/bin/clang clang /usr/bin/clang-15 100
+        gcc --version
+        clang --version
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        rustup update nightly
+        rustup default nightly
+        git submodule update --recursive --init
+        cargo b --features build-c

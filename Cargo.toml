@@ -1,0 +1,11 @@
+[package]
+name = "nut_sys"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+build-c = []
+
+[dependencies]
+libc = "0.2.154"
+
