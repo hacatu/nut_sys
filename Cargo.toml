@@ -1,7 +1,14 @@
 [package]
 name = "nut_sys"
 version = "0.1.0"
+authors = ["hacatu"]
 edition = "2021"
+description = "Wrapper for Number-Theory-Utils C library"
+repository = "https://github.com/hacatu/nut_sys"
+license = "MPL-2.0"
+keywords = ["number-theory", "math", "prime"]
+categories = ["api-bindings", "external-ffi-bindings", "mathematics"]
+links = "nut"
 
 [features]
 build-c = []
