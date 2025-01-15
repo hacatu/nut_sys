@@ -3,7 +3,7 @@ use std::{borrow::{Borrow, BorrowMut}, marker::PhantomData, mem::MaybeUninit, op
 use raw::{_Diri, _Factors};
 
 pub mod raw {
-    use crate::PrimePower;
+    use crate::{FactorConf, PrimePower};
 
 	#[repr(C)]
 	pub struct _Factors {
@@ -32,14 +32,28 @@ pub mod raw {
 		pub fn nut_Factor_fprint(file: *mut libc::FILE, factors: *const _Factors);
 		pub fn nut_Factor_append(factors: *mut _Factors, m: u64, k: u64);
 		pub fn nut_Factor_combine(factors: *mut _Factors, factors2: *const _Factors, k: u64);
+		pub fn nut_Factor_ipow(factors: *mut _Factors, power: u64);
 		pub fn nut_Factor_forall_divs_tmptmp(factors: *const _Factors, f: extern fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
+		pub fn nut_Factor_forall_divs_le_tmptmp(factors: *const _Factors, d_max: u64, f: extern fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
+		pub fn nut_u64_factor_heuristic(n: u64, num_primes: u64, primes: *const u64, conf: *const FactorConf, factors: *mut _Factors) -> u64;
 		pub fn nut_u64_order_mod(a: u64, n: u64, cn: u64, cn_factors: *mut _Factors) -> u64;
 		pub fn nut_max_prime_divs(max: u64) -> u64;
 		pub fn nut_u64_is_prime_dmr(n: u64) -> bool;
 		pub fn nut_Diri_init(_self: *mut _Diri, x: i64, y: i64) -> bool;
 		pub fn nut_Diri_destroy(_self: *mut _Diri);
 		pub fn nut_Diri_compute_pi(_self: *mut _Diri) -> bool;
+		pub static nut_small_primes: *const u64;
+		pub static nut_default_factor_conf: FactorConf;
 	}
+}
+
+#[repr(C)]
+pub struct FactorConf {
+	pollard_max: u64,
+ 	pollard_stride: u64,
+ 	lenstra_max: u64,
+ 	lenstra_bfac: u64,
+ 	qsieve_max: u64
 }
 
 #[repr(C)]
@@ -65,6 +79,10 @@ impl Factors {
 		unsafe { raw::nut_fill_factors_from_largest(self.borrow_mut(), n, largest_factors.as_ptr()); }
 	}
 
+	pub fn factor_heuristic(&mut self, n: u64) -> u64 {
+		unsafe { raw::nut_u64_factor_heuristic(n, 25, raw::nut_small_primes, &raw::nut_default_factor_conf, self.borrow_mut()) }
+	}
+
 	pub fn append(&mut self, p: u64, e: u64) {
 		unsafe { raw::nut_Factor_append(self.borrow_mut(), p, e); }
 	}
@@ -73,17 +91,30 @@ impl Factors {
 		unsafe { raw::nut_Factor_combine(self.borrow_mut(), other.borrow(), e); }
 	}
 
+	pub fn pow(&mut self, power: u64) {
+		unsafe { raw::nut_Factor_ipow(self.borrow_mut(), power) }
+	}
+
 	pub fn num_primes(&self) -> usize {
 		unsafe { &*self._inner } .num_primes as _
 	}
 
 	pub fn iter_divs(&self) -> DivisorIterator<'_> {
-		let mut dfactors = Self::make_w(self.num_primes() as _);
-		unsafe { (*dfactors._inner).num_primes = self.num_primes() as _ };
+		let mut dfactors = Self::make_w(self.num_primes()as _);
+		unsafe { (*dfactors._inner).num_primes = self.num_primes()as _ };
 		for i in 0..self.num_primes() {
 			dfactors[i] = PrimePower { prime: 1, power: 0 };
 		}
 		DivisorIterator { factors: self, dfactors, d: 1 }
+	}
+
+	pub fn iter_divs_le(&self, d_max: u64) -> DivisorLeIterator<'_> {
+		let mut dfactors = Self::make_w(self.num_primes()as _);
+		unsafe { (*dfactors._inner).num_primes = self.num_primes()as _ };
+		for i in 0..self.num_primes() {
+			dfactors[i] = PrimePower { prime:1, power: 0 };
+		}
+		DivisorLeIterator { factors: self, dfactors, d_max, d: 1 }
 	}
 }
 
@@ -140,6 +171,43 @@ impl<'a> Iterator for DivisorIterator<'a> {
 				cur_ppow.prime *= max_ppow.prime;
 				self.d *= max_ppow.prime;
 				return Some(self.d);
+			}
+			cur_ppow.power = 0;
+			self.d /= cur_ppow.prime;
+			cur_ppow.prime = 1;
+		}
+		self.d = 0;
+		Some(1)
+	}
+}
+
+pub struct DivisorLeIterator<'a> {
+	factors: &'a Factors,
+	dfactors: Factors,
+	d_max: u64,
+	d: u64
+}
+
+impl<'a> Iterator for DivisorLeIterator<'a> {
+	type Item = u64;
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.d == 0 {
+			return None
+		}
+		if self.d_max <= 1 {
+			self.d = 0;
+			return if self.d_max == 1 { Some(1) } else { None }
+		}
+		for i in 0..self.dfactors.num_primes() {
+			let cur_ppow = &mut self.dfactors[i];
+			let max_ppow = &self.factors[i];
+			if cur_ppow.power < max_ppow.power {
+				cur_ppow.power += 1;
+				cur_ppow.prime *= max_ppow.prime;
+				self.d *= max_ppow.prime;
+				if self.d <= self.d_max {
+					return Some(self.d);
+				}
 			}
 			cur_ppow.power = 0;
 			self.d /= cur_ppow.prime;
