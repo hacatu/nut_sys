@@ -1,4 +1,4 @@
-#![feature(allocator_api, ptr_as_ref_unchecked)]
+#![feature(allocator_api, ptr_as_ref_unchecked, impl_trait_in_assoc_type)]
 use std::{borrow::{Borrow, BorrowMut}, marker::PhantomData, mem::MaybeUninit, ops::{Index, IndexMut}};
 use raw::{_Diri, _Factors};
 
@@ -42,11 +42,12 @@ pub mod raw {
 		pub fn nut_Diri_init(_self: *mut _Diri, x: i64, y: i64) -> bool;
 		pub fn nut_Diri_destroy(_self: *mut _Diri);
 		pub fn nut_Diri_compute_pi(_self: *mut _Diri) -> bool;
-		pub static nut_small_primes: *const u64;
+		pub static nut_small_primes: [u64; 25];
 		pub static nut_default_factor_conf: FactorConf;
 	}
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FactorConf {
 	pollard_max: u64,
@@ -56,6 +57,7 @@ pub struct FactorConf {
  	qsieve_max: u64
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct PrimePower {
 	pub prime: u64,
@@ -80,7 +82,7 @@ impl Factors {
 	}
 
 	pub fn factor_heuristic(&mut self, n: u64) -> u64 {
-		unsafe { raw::nut_u64_factor_heuristic(n, 25, raw::nut_small_primes, &raw::nut_default_factor_conf, self.borrow_mut()) }
+		unsafe { raw::nut_u64_factor_heuristic(n, 25, raw::nut_small_primes.as_ptr(), &raw::nut_default_factor_conf, self.borrow_mut()) }
 	}
 
 	pub fn append(&mut self, p: u64, e: u64) {
@@ -116,6 +118,10 @@ impl Factors {
 		}
 		DivisorLeIterator { factors: self, dfactors, d_max, d: 1 }
 	}
+
+	pub unsafe fn set_num_primes(&mut self, num_primes: usize) {
+		unsafe { (*self._inner).num_primes = num_primes as _};
+	}
 }
 
 impl Borrow<_Factors> for Factors {
@@ -148,6 +154,17 @@ impl IndexMut<usize> for Factors {
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
 		assert!(index < self.num_primes(), "Index out of bounds!");
 		unsafe { (*self._inner).factors.as_mut_ptr().offset(index as _).as_mut_unchecked() }
+	}
+}
+
+impl IntoIterator for &Factors {
+	type Item = PrimePower;
+
+	type IntoIter = impl Iterator<Item=PrimePower>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		let res = (0..self.num_primes()).map(|i|self[i]);
+		res
 	}
 }
 
