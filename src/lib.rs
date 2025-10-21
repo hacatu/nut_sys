@@ -1,6 +1,8 @@
 #![feature(allocator_api, ptr_as_ref_unchecked, impl_trait_in_assoc_type)]
 use std::{borrow::{Borrow, BorrowMut}, marker::PhantomData, mem::MaybeUninit, ops::{Index, IndexMut}};
 use raw::{_Diri, _Factors};
+use auto_ops::impl_op_ex;
+use crate::raw::{nut_Factor_carmichael, nut_Factor_circle_latte, nut_Factor_divcount, nut_Factor_divide, nut_Factor_divpowsum, nut_Factor_divsum, nut_Factor_divtupcount, nut_Factor_phi, nut_Factors_copy, nut_Factors_prod};
 
 pub mod raw {
     use crate::{FactorConf, PrimePower};
@@ -20,21 +22,40 @@ pub mod raw {
 	}
 	
 	#[link(name = "nut")]
-	extern {
+	extern "C" {
 		pub fn nut_sieve_phi(max: u64) -> *mut u64;
 		pub fn nut_sieve_sigma_0(max: u64) -> *mut u64;
+		pub fn nut_sieve_sigma_1(max: u64) -> *mut u64;
 		pub fn nut_sieve_omega(max: u64) -> *mut u8;
 		pub fn nut_sieve_mobius(max: u64) -> *mut u8;
 		pub fn nut_sieve_largest_factors(max: u64) -> *mut u64;
+		pub fn nut_sieve_smallest_factors(max: u64) -> *mut u32;
+		pub fn nut_sieve_smallest_factors_wheel6(max: u64) -> *mut u32;
 		pub fn nut_sieve_carmichael(max: u64) -> *mut u64;
 		pub fn nut_make_Factors_w(max_primes: u64) -> *mut _Factors;
 		pub fn nut_fill_factors_from_largest(out: *mut _Factors, n: u64, largest_factors: *const u64);
-		pub fn nut_Factor_fprint(file: *mut libc::FILE, factors: *const _Factors);
+		pub fn nut_fill_factors_from_smallest(out: *mut _Factors, n: u64, smallest_factors: *const u32);
+		pub fn nut_fill_factors_from_smallest_wheel6(out: *mut _Factors, n: u64, smallest_factors: *const u32);
+		pub fn nut_Factor_fprint(file: *mut libc::FILE, factors: *const _Factors) -> libc::c_int;
 		pub fn nut_Factor_append(factors: *mut _Factors, m: u64, k: u64);
 		pub fn nut_Factor_combine(factors: *mut _Factors, factors2: *const _Factors, k: u64);
 		pub fn nut_Factor_ipow(factors: *mut _Factors, power: u64);
-		pub fn nut_Factor_forall_divs_tmptmp(factors: *const _Factors, f: extern fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
-		pub fn nut_Factor_forall_divs_le_tmptmp(factors: *const _Factors, d_max: u64, f: extern fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
+		pub fn nut_Factor_forall_divs_tmptmp(factors: *const _Factors, f: extern "C" fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
+		pub fn nut_Factor_forall_divs_le_tmptmp(factors: *const _Factors, d_max: u64, f: extern "C" fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void) -> libc::c_int;
+
+		pub fn nut_Factors_copy(factors: *const _Factors) -> *mut _Factors;
+		pub fn nut_Factors_prod(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_divcount(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_divsum(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_divpowsum(factors: *const _Factors, power: u64) -> u64;
+		pub fn nut_Factor_divtupcount(factors: *const _Factors, k: u64, modulus: u64) -> u64;
+		pub fn nut_Factor_circle_latte(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_phi(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_carmichael(factors: *const _Factors) -> u64;
+		pub fn nut_Factor_forall_divs(factors: *const _Factors, f: extern "C" fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void, dfactors: *mut _Factors, pfactors: *mut _Factors) -> libc::c_int;
+		pub fn nut_Factor_forall_divs_le(factors: *const _Factors, d_max: u64, f: extern "C" fn(*const _Factors, u64, *mut libc::c_void) -> libc::c_int, data: *mut libc::c_void, dfactors: *mut _Factors, pfactors: *mut _Factors) -> libc::c_int; 
+		pub fn nut_Factor_divide(out: *mut _Factors, factors: *const _Factors, dfactors: *const _Factors);
+
 		pub fn nut_u64_factor_heuristic(n: u64, num_primes: u64, primes: *const u64, conf: *const FactorConf, factors: *mut _Factors) -> u64;
 		pub fn nut_u64_order_mod(a: u64, n: u64, cn: u64, cn_factors: *mut _Factors) -> u64;
 		pub fn nut_max_prime_divs(max: u64) -> u64;
@@ -81,6 +102,14 @@ impl Factors {
 		unsafe { raw::nut_fill_factors_from_largest(self.borrow_mut(), n, largest_factors.as_ptr()); }
 	}
 
+	pub fn fill_from_smallest_factors(&mut self, n: u64, smallest_factors: &[u32]) {
+		unsafe { raw::nut_fill_factors_from_smallest(self.borrow_mut(), n, smallest_factors.as_ptr()); }
+	}
+
+	pub fn fill_from_smallest_factors_wheel6(&mut self, n: u64, smallest_factors: &[u32]) {
+		unsafe { raw::nut_fill_factors_from_smallest_wheel6(self.borrow_mut(), n, smallest_factors.as_ptr()); }
+	}
+
 	pub fn factor_heuristic(&mut self, n: u64) -> u64 {
 		unsafe { raw::nut_u64_factor_heuristic(n, 25, raw::nut_small_primes.as_ptr(), &raw::nut_default_factor_conf, self.borrow_mut()) }
 	}
@@ -110,6 +139,11 @@ impl Factors {
 		DivisorIterator { factors: self, dfactors, d: 1 }
 	}
 
+	pub fn iter_divs_128(&self) -> DivisorIterator128<'_> {
+		let l = self.num_primes()as _;
+		DivisorIterator128 { factors: self, ppows: vec![1; l].into_boxed_slice(), exps: vec![0; l].into_boxed_slice(), d: 1 }
+	}
+
 	pub fn iter_divs_le(&self, d_max: u64) -> DivisorLeIterator<'_> {
 		let mut dfactors = Self::make_w(self.num_primes()as _);
 		unsafe { (*dfactors._inner).num_primes = self.num_primes()as _ };
@@ -121,6 +155,50 @@ impl Factors {
 
 	pub unsafe fn set_num_primes(&mut self, num_primes: usize) {
 		unsafe { (*self._inner).num_primes = num_primes as _};
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item=&PrimePower> {
+		unsafe { (&(*self._inner).factors)[..self.num_primes()].iter() }
+	}
+
+	pub fn iter_mut(&mut self) -> impl Iterator<Item=&mut PrimePower> {
+		unsafe { (&mut (*self._inner).factors)[..self.num_primes()].iter_mut() }
+	}
+
+	pub fn prod(&self) -> u64 {
+		unsafe { nut_Factors_prod(self._inner.cast_const()) }
+	}
+
+	pub fn divcount(&self) -> u64 {
+		unsafe { nut_Factor_divcount(self._inner.cast_const()) }
+	}
+
+	pub fn divsum(&self) -> u64 {
+		unsafe { nut_Factor_divsum(self._inner.cast_const()) }
+	}
+
+	pub fn divpowsum(&self, power: u64) -> u64 {
+		unsafe { nut_Factor_divpowsum(self._inner.cast_const(), power) }
+	}
+
+	pub fn divtupcount(&self, k: u64, modulus: u64) -> u64 {
+		unsafe { nut_Factor_divtupcount(self._inner.cast_const(), k, modulus) }
+	}
+
+	pub fn circle_latte(&self) -> u64 {
+		unsafe { nut_Factor_circle_latte(self._inner.cast_const()) }
+	}
+
+	pub fn phi(&self) -> u64 {
+		unsafe { nut_Factor_phi(self._inner.cast_const()) }
+	}
+
+	pub fn carmichael(&self) -> u64 {
+		unsafe { nut_Factor_carmichael(self._inner.cast_const()) }
+	}
+
+	pub fn sink_divide(&mut self, factors: &Self, dfactors: &Self) {
+		unsafe { nut_Factor_divide(self._inner, factors._inner.cast_const(), dfactors._inner.cast_const()) }
 	}
 }
 
@@ -142,6 +220,12 @@ impl Drop for Factors {
 	}
 }
 
+impl Clone for Factors {
+	fn clone(&self) -> Self {
+		Self { _inner: unsafe { nut_Factors_copy(self._inner.cast_const()) }}
+	}
+}
+
 impl Index<usize> for Factors {
 	type Output = PrimePower;
 	fn index(&self, index: usize) -> &Self::Output {
@@ -157,16 +241,35 @@ impl IndexMut<usize> for Factors {
 	}
 }
 
-impl IntoIterator for &Factors {
-	type Item = PrimePower;
+impl <'a> IntoIterator for &'a Factors {
+	type Item = &'a PrimePower;
 
+	type IntoIter = impl Iterator<Item=&'a PrimePower>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		(0..self.num_primes()).map(|i|&self[i])
+	}
+}
+
+impl IntoIterator for Factors {
+	type Item = PrimePower;
 	type IntoIter = impl Iterator<Item=PrimePower>;
 
 	fn into_iter(self) -> Self::IntoIter {
-		let res = (0..self.num_primes()).map(|i|self[i]);
-		res
+		unsafe { (*self._inner).factors.into_iter().take(self.num_primes()) }
 	}
 }
+
+impl_op_ex!(/ |lhs: &Factors, rhs: &Factors| -> Factors {
+	let mut res = Factors::make_w(lhs.num_primes() as _);
+	res.sink_divide(lhs, rhs);
+	res
+});
+
+impl_op_ex!(/= |lhs: &mut Factors, rhs: &Factors| {
+	let tmp = lhs.clone();
+	lhs.sink_divide(&tmp, rhs);
+});
 
 pub struct DivisorIterator<'a> {
 	factors: &'a Factors,
@@ -192,6 +295,38 @@ impl<'a> Iterator for DivisorIterator<'a> {
 			cur_ppow.power = 0;
 			self.d /= cur_ppow.prime;
 			cur_ppow.prime = 1;
+		}
+		self.d = 0;
+		Some(1)
+	}
+}
+
+pub struct DivisorIterator128<'a> {
+	factors: &'a Factors,
+	ppows: Box<[u128]>,
+	exps: Box<[u64]>,
+	d: u128
+}
+
+impl<'a> Iterator for DivisorIterator128<'a> {
+	type Item = u128;
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.d == 0 {
+			return None
+		}
+		for i in 0..self.factors.num_primes() {
+			let cur_ppow = &mut self.ppows[i];
+			let cur_exp = &mut self.exps[i];
+			let max_ppow = &self.factors[i];
+			if *cur_exp < max_ppow.power {
+				*cur_exp += 1;
+				*cur_ppow *= max_ppow.prime as u128;
+				self.d *= max_ppow.prime as u128;
+				return Some(self.d);
+			}
+			*cur_exp = 0;
+			self.d /= *cur_ppow;
+			*cur_ppow = 1;
 		}
 		self.d = 0;
 		Some(1)
@@ -306,6 +441,19 @@ impl<T> BorrowMut<[T]> for MallocArray<T> {
 	}
 }
 
+impl<T> Index<usize> for MallocArray<T> {
+	type Output = T;
+	fn index(&self, index: usize) -> &Self::Output {
+		unsafe { &*self._buf.cast::<T>().add(index) }
+	}
+}
+
+impl<T> IndexMut<usize> for MallocArray<T> {
+	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+		unsafe { &mut*self._buf.cast::<T>().add(index) }
+	}
+}
+
 impl<T> Drop for MallocArray<T> {
 	fn drop(&mut self) {
 		unsafe { libc::free(self._buf) }
@@ -327,6 +475,17 @@ pub fn sieve_phi(max: u64) -> MallocArray<u64> {
 pub fn sieve_sigma_0(max: u64) -> MallocArray<u64> {
 	unsafe {
 		let buf = raw::nut_sieve_sigma_0(max);
+		MallocArray {
+			_buf: buf.cast(),
+			_len: (max + 1) as usize,
+			_elem: PhantomData
+		}
+	}
+}
+
+pub fn sieve_sigma_1(max: u64) -> MallocArray<u64> {
+	unsafe {
+		let buf = raw::nut_sieve_sigma_1(max);
 		MallocArray {
 			_buf: buf.cast(),
 			_len: (max + 1) as usize,
@@ -368,6 +527,36 @@ pub fn sieve_largest_factors(max: u64) -> MallocArray<u64> {
 	}
 }
 
+pub fn sieve_smallest_factors(max: u64) -> MallocArray<u32> {
+	unsafe {
+		let buf = raw::nut_sieve_smallest_factors(max);
+		MallocArray {
+			_buf: buf.cast(),
+			_len: (max + 1) as usize,
+			_elem: PhantomData
+		}
+	}
+}
+
+pub fn sieve_smallest_factors_wheel6(max: u64) -> MallocArray<u32> {
+	unsafe {
+		let buf = raw::nut_sieve_smallest_factors_wheel6(max);
+		MallocArray {
+			_buf: buf.cast(),
+			_len: match max%6 {
+				0 => (max - 1)/3 + 1,
+				1 => max/3 + 1,
+				2 => (max-1)/3 + 1,
+				3 => (max-2)/3 + 1,
+				4 => (max-3)/3 + 1,
+				5 => max/3 + 1,
+				_ => unreachable!("n mod 6 is <= 5")
+			} as _,
+			_elem: PhantomData
+		}
+	}
+}
+
 pub fn sieve_carmichael(max: u64) -> MallocArray<u64> {
 	unsafe {
 		let buf = raw::nut_sieve_carmichael(max);
@@ -396,4 +585,3 @@ pub fn max_prime_divs(max: u64) -> u64 {
 pub fn is_prime_dmr(n: u64) -> bool {
 	unsafe { raw::nut_u64_is_prime_dmr(n) }
 }
-

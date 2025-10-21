@@ -15,4 +15,5 @@ build-c = []
 
 [dependencies]
 libc = "0.2.154"
+auto_ops = "0.3"
 
