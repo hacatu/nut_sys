@@ -1,6 +1,6 @@
 [package]
 name = "nut_sys"
-version = "0.1.3"
+version = "0.2.0"
 authors = ["hacatu"]
 edition = "2021"
 description = "Wrapper for Number-Theory-Utils C library"
