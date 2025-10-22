@@ -28,12 +28,16 @@ pub mod raw {
 		pub fn nut_sieve_sigma_1(max: u64) -> *mut u64;
 		pub fn nut_sieve_omega(max: u64) -> *mut u8;
 		pub fn nut_sieve_mobius(max: u64) -> *mut u8;
+		#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 		pub fn nut_sieve_largest_factors(max: u64) -> *mut u64;
+		#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 		pub fn nut_sieve_smallest_factors(max: u64) -> *mut u32;
 		pub fn nut_sieve_smallest_factors_wheel6(max: u64) -> *mut u32;
 		pub fn nut_sieve_carmichael(max: u64) -> *mut u64;
 		pub fn nut_make_Factors_w(max_primes: u64) -> *mut _Factors;
+		#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 		pub fn nut_fill_factors_from_largest(out: *mut _Factors, n: u64, largest_factors: *const u64);
+		#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 		pub fn nut_fill_factors_from_smallest(out: *mut _Factors, n: u64, smallest_factors: *const u32);
 		pub fn nut_fill_factors_from_smallest_wheel6(out: *mut _Factors, n: u64, smallest_factors: *const u32);
 		pub fn nut_Factor_fprint(file: *mut libc::FILE, factors: *const _Factors) -> libc::c_int;
@@ -98,11 +102,15 @@ impl Factors {
 		Self { _inner: unsafe { raw::nut_make_Factors_w(max_primes) } }
 	}
 
+	#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 	pub fn fill_from_largest_factors(&mut self, n: u64, largest_factors: &[u64]) {
+		#[allow(deprecated)]
 		unsafe { raw::nut_fill_factors_from_largest(self.borrow_mut(), n, largest_factors.as_ptr()); }
 	}
 
+	#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 	pub fn fill_from_smallest_factors(&mut self, n: u64, smallest_factors: &[u32]) {
+		#[allow(deprecated)]
 		unsafe { raw::nut_fill_factors_from_smallest(self.borrow_mut(), n, smallest_factors.as_ptr()); }
 	}
 
@@ -516,8 +524,10 @@ pub fn sieve_mobius(max: u64) -> MallocArray<u8> {
 	}
 }
 
+#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 pub fn sieve_largest_factors(max: u64) -> MallocArray<u64> {
 	unsafe {
+		#[allow(deprecated)]
 		let buf = raw::nut_sieve_largest_factors(max);
 		MallocArray {
 			_buf: buf.cast(),
@@ -527,8 +537,11 @@ pub fn sieve_largest_factors(max: u64) -> MallocArray<u64> {
 	}
 }
 
+
+#[deprecated(since="0.2.0", note="use smallest_wheel6 functions")]
 pub fn sieve_smallest_factors(max: u64) -> MallocArray<u32> {
 	unsafe {
+		#[allow(deprecated)]
 		let buf = raw::nut_sieve_smallest_factors(max);
 		MallocArray {
 			_buf: buf.cast(),
